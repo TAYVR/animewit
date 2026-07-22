@@ -1,0 +1,352 @@
+# topcima-api
+
+A Node.js + Express REST API that fetches **movie** and **TV episode** watch/download
+links from [topcinma.com](https://topcinma.com) by using a TMDB ID.
+
+The API takes a TMDB ID (and for TV: season + episode), looks the title up on TMDB,
+then scrapes the matching topcinma.com page to return embed iframe URLs (watch servers)
+and multi-quality download links.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Installation](#installation)
+- [Environment Variables](#environment-variables)
+- [Running the Server](#running-the-server)
+- [API Endpoints](#api-endpoints)
+  - [Health Check](#1-health-check)
+  - [Movie (Fast)](#2-movie-fast)
+  - [Movie (Direct / Puppeteer)](#3-movie-direct--puppeteer)
+  - [TV Episode (Fast)](#4-tv-episode-fast)
+  - [TV Episode (Direct / Puppeteer)](#5-tv-episode-direct--puppeteer)
+- [Response Structure](#response-structure)
+- [Filtering Behavior](#filtering-behavior)
+- [Error Handling](#error-handling)
+- [Usage Examples](#usage-examples)
+- [Notes & Limitations](#notes--limitations)
+
+---
+
+## Features
+
+- 🎬 **Movie scraping** — watch servers + download links by TMDB movie ID.
+- 📺 **TV episode scraping** — watch servers + download links by TMDB show ID + season + episode.
+- ⚡ **Fast mode** — uses `axios` + `cheerio` (no browser). Resolves server iframes via the site's `Server.php` AJAX endpoint.
+- 🐢 **Direct mode** — uses `puppeteer` headless Chrome to click every server button and extract the real iframe `src`.
+- 🧹 **Auto-filters** `.html` embed-wrapper servers (e.g. `vidtube`, `updown`, `uqload`), keeping only direct player URLs in `watchServers`.
+- 🌐 CORS enabled, JSON responses.
+
+---
+
+## Tech Stack
+
+| Package | Purpose |
+|---|---|
+| `express` | HTTP server / REST API |
+| `axios` | HTTP requests to TMDB + topcinma |
+| `cheerio` | HTML parsing (fast mode) |
+| `puppeteer` | Headless browser (direct mode) |
+| `cors` | Cross-origin requests |
+| `dotenv` | Environment configuration |
+
+---
+
+## Project Structure
+
+```
+.
+├── server.js              # Express app + all API routes
+├── tmdbService.js         # TMDB client (getMovieDetails, getTvEpisodeDetails)
+├── wecimaScraper.js       # topcinma.com scraper (movie + TV, fast + puppeteer)
+├── package.json
+├── .env                   # TMDB_API_KEY, PORT
+└── node_modules/
+```
+
+### Exports
+
+**`tmdbService.js`**
+- `getMovieDetails(tmdbId)` → movie object
+- `getTvEpisodeDetails(tvId, season, episode)` → episode object
+
+**`wecimaScraper.js`**
+- `scrapeTopcinma(title, year)` — movie, fast
+- `scrapeTopcinmaWithPuppeteer(title, year)` — movie, direct
+- `scrapeTopcinmaEpisode(title, season, episode)` — TV, fast
+- `scrapeTopcinmaEpisodeWithPuppeteer(title, season, episode)` — TV, direct
+- `filterHtmlWatchServers(servers)` — removes `.html` embed-wrapper servers
+
+---
+
+## Installation
+
+```bash
+npm install
+```
+
+> Puppeteer downloads its own Chromium. If you are on a server without a browser,
+> make sure system dependencies are installed.
+
+---
+
+## Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+TMDB_API_KEY=your_tmdb_api_key_here
+PORT=3000
+```
+
+Get a free API key at [https://www.themoviedb.org/settings/api](https://www.themoviedb.org/settings/api).
+
+---
+
+## Running the Server
+
+```bash
+npm start
+# or
+npm run dev
+```
+
+Server logs the available endpoints on boot:
+
+```
+Server running on port 3000
+Movie API: http://localhost:3000/api/movie/:tmdbId
+TV API:    http://localhost:3000/api/tv/:tvId/season/:season/episode/:episode
+```
+
+---
+
+## API Endpoints
+
+All endpoints return JSON. Replace IDs with real TMDB numeric IDs.
+
+### 1. Health Check
+
+```
+GET /health
+```
+
+```json
+{ "status": "ok" }
+```
+
+---
+
+### 2. Movie (Fast)
+
+```
+GET /api/movie/:tmdbId
+```
+
+Uses `axios` + `cheerio`. Quick, no browser.
+
+**Example**
+
+```
+GET /api/movie/550
+```
+
+---
+
+### 3. Movie (Direct / Puppeteer)
+
+```
+GET /api/movie/:tmdbId/direct
+```
+
+Launches headless Chrome, clicks each server, and extracts the real iframe `src`.
+Slower but returns verified direct URLs.
+
+**Example**
+
+```
+GET /api/movie/550/direct
+```
+
+---
+
+### 4. TV Episode (Fast)
+
+```
+GET /api/tv/:tvId/season/:season/episode/:episode
+```
+
+Builds the topcinma Arabic URL:
+
+```
+مسلسل-{title}-الموسم-{ordinal}-الحلقة-{episode}-مترجمة
+```
+
+Season numbers 1–20 are converted to Arabic ordinals
+(`الأول`, `الثاني`, … `العشرون`). Falls back to a search if the direct URL 404s.
+
+**Example** (The King of Queens, S9E12)
+
+```
+GET /api/tv/4238/season/9/episode/12
+```
+
+---
+
+### 5. TV Episode (Direct / Puppeteer)
+
+```
+GET /api/tv/:tvId/season/:season/episode/:episode/direct
+```
+
+Same as above but with Puppeteer for direct iframe URLs.
+
+**Example**
+
+```
+GET /api/tv/4238/season/9/episode/12/direct
+```
+
+---
+
+## Response Structure
+
+### Movie response
+
+```json
+{
+  "movie": {
+    "id": 550,
+    "title": "Fight Club",
+    "original_title": "Fight Club",
+    "release_date": "1999-10-15",
+    "year": "1999",
+    "overview": "...",
+    "poster_path": "https://image.tmdb.org/t/p/w500/...",
+    "backdrop_path": "https://image.tmdb.org/t/p/w500/..."
+  },
+  "watchServers": [
+    {
+      "id": "234799",
+      "server": "1",
+      "name": "UpDown",
+      "isActive": false,
+      "url": "https://updown.icu/embed-xxxx-1280x640.html",
+      "iframeUrl": "https://updown.icu/embed-xxxx-1280x640.html"
+    }
+  ],
+  "currentIframe": "https://...",
+  "downloadLinks": [
+    {
+      "url": "https://updown.cam/xxxx",
+      "server": "UpDown",
+      "provider": "1080p",
+      "quality": "1080p",
+      "type": "regular"
+    }
+  ]
+}
+```
+
+### TV episode response
+
+```json
+{
+  "episode": {
+    "show_id": 4238,
+    "show_name": "The King of Queens",
+    "original_name": "The King of Queens",
+    "season_number": 9,
+    "episode_number": 12,
+    "episode_name": "Episode 12",
+    "overview": "",
+    "still_path": "https://image.tmdb.org/t/p/w500/...",
+    "air_date": "2007-05-14"
+  },
+  "watchServers": [ /* same shape as movie */ ],
+  "currentIframe": "https://...",
+  "downloadLinks": [ /* same shape as movie */ ]
+}
+```
+
+### `watchServers` object
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | topcinma server `data-id` |
+| `server` | string | server index (`data-server`) |
+| `name` | string | display name (e.g. `UpDown`, `StreamWish`) |
+| `isActive` | boolean | is the default active server |
+| `url` / `iframeUrl` | string | embed iframe URL (direct mode only sets `iframeUrl`) |
+
+### `downloadLinks` object
+
+| Field | Type | Description |
+|---|---|---|
+| `url` | string | download URL |
+| `server` | string | host name (e.g. `UpDown`, `Mdiaload`) |
+| `provider` | string | quality label (e.g. `1080p`) |
+| `quality` | string | `Multi` (pro server) or quality (e.g. `1080p`) |
+| `type` | string | `pro` (multi-quality) or `regular` |
+
+---
+
+## Filtering Behavior
+
+`filterHtmlWatchServers()` removes any watch server whose `iframeUrl` ends with
+`.html` (embed-wrapper pages such as `vidtube`, `updown`, `uqload`). Only direct
+player URLs (e.g. `streamwish.fun/e/...`, `mixdrop.ps/e/...`) are returned in
+`watchServers`.
+
+> Note: `currentIframe` is returned as-is and may still point to a `.html` wrapper
+> (the page's default active server). Filter it client-side if needed.
+
+---
+
+## Error Handling
+
+| Status | Body | Trigger |
+|---|---|---|
+| `400` | `{ "error": "Invalid TMDB ID" }` | non-numeric ID |
+| `400` | `{ "error": "Invalid TV ID, season or episode" }` | non-numeric TV params |
+| `404` | `{ "error": "... not found ..." }` | TMDB or topcinma miss |
+| `500` | `{ "error": "Internal server error", "message": "..." }` | unexpected scrape failure |
+
+---
+
+## Usage Examples
+
+```bash
+# Movie
+curl http://localhost:3000/api/movie/550
+
+# Movie (direct)
+curl http://localhost:3000/api/movie/550/direct
+
+# TV episode
+curl http://localhost:3000/api/tv/4238/season/9/episode/12
+
+# TV episode (direct)
+curl http://localhost:3000/api/tv/4238/season/9/episode/12/direct
+
+# Health
+curl http://localhost:3000/health
+```
+
+---
+
+## Notes & Limitations
+
+- The scraper targets **topcinma.com** specifically; HTML selectors
+  (`.server--item`, `.player--iframe iframe`, `.proServer a`, `.DownloadBlock`)
+  depend on that site's current layout and may break if the site changes.
+- TV season ordinals are mapped for seasons **1–20**. Seasons above 20 fall back
+  to the raw number in the URL.
+- The `/direct` endpoints are significantly slower (real browser) and heavier on
+  resources — avoid calling them in high-traffic loops.
+- TMDB requests count against your API key quota.
+- This project is for educational/personal use. Respect the target site's `robots.txt`
+  and terms of service, and applicable copyright law.
