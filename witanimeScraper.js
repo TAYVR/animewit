@@ -3,6 +3,7 @@ const cheerio = require('cheerio');
 
 const WITANIME_BASE_URL = 'https://witanime.you';
 const PROXY_URL = process.env.PROXY_URL || '';
+const SCRAPERAPI_KEY = process.env.SCRAPERAPI_KEY || '';
 
 const BROWSER_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
@@ -121,6 +122,11 @@ function parseDownloadRegistry($) {
 }
 
 async function fetchPage(url) {
+  if (SCRAPERAPI_KEY) {
+    const proxyUrl = `https://api.scraperapi.com/?api_key=${SCRAPERAPI_KEY}&url=${encodeURIComponent(url)}`;
+    const response = await axios.get(proxyUrl);
+    return response.data;
+  }
   const config = { headers: BROWSER_HEADERS };
   if (PROXY_URL) {
     const { HttpsProxyAgent } = require('https-proxy-agent');

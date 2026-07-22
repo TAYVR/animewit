@@ -92,22 +92,39 @@ app.get('/api/search', async (req, res) => {
       return res.status(400).json({ error: 'Missing search query parameter "q"' });
     }
 
-    const jikanResults = await searchAnime(q);
+    let results = [];
+    try {
+      const jikanResults = await searchAnime(q);
+      results = jikanResults.map(anime => ({
+        mal_id: anime.mal_id,
+        title: anime.title,
+        title_english: anime.title_english,
+        title_japanese: anime.title_japanese,
+        image: anime.images?.jpg?.large_image_url || null,
+        type: anime.type,
+        episodes: anime.episodes,
+        status: anime.status,
+        score: anime.score,
+        year: anime.year,
+        synopsis: anime.synopsis ? anime.synopsis.substring(0, 300) + '...' : null,
+        slug: (anime.title_english || anime.title).toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-')
+      }));
+    } catch (jikanErr) {
+      console.log('Jikan search failed, falling back to witanime search');
+    }
 
-    const results = jikanResults.map(anime => ({
-      mal_id: anime.mal_id,
-      title: anime.title,
-      title_english: anime.title_english,
-      title_japanese: anime.title_japanese,
-      image: anime.images?.jpg?.large_image_url || null,
-      type: anime.type,
-      episodes: anime.episodes,
-      status: anime.status,
-      score: anime.score,
-      year: anime.year,
-      synopsis: anime.synopsis ? anime.synopsis.substring(0, 300) + '...' : null,
-      slug: (anime.title_english || anime.title).toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-')
-    }));
+    if (results.length === 0) {
+      const witanimeResults = await searchAnimeOnWitanime(q);
+      results = witanimeResults.map((r, i) => ({
+        mal_id: null,
+        title: r.title,
+        title_english: r.title,
+        title_japanese: null,
+        image: r.image,
+        type: r.type,
+        slug: r.url ? r.url.split('/anime/')[1]?.replace(/\/$/, '') : r.title.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-')
+      }));
+    }
 
     res.json({ results });
 
