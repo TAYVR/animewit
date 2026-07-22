@@ -1,16 +1,8 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-let puppeteer, chromium;
-try {
-  puppeteer = require('puppeteer-core');
-  chromium = require('@sparticuz/chromium');
-} catch (e) {
-  // puppeteer optional — used as fallback on Vercel
-}
-
 const WITANIME_BASE_URL = 'https://witanime.you';
-const IS_VERCEL = !!(process.env.VERCEL || process.env.NODE_ENV === 'production');
+const PROXY_URL = process.env.PROXY_URL || '';
 
 const BROWSER_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
@@ -128,44 +120,21 @@ function parseDownloadRegistry($) {
   return cache;
 }
 
-async function fetchPageWithPuppeteer(url) {
-  if (!puppeteer || !chromium) throw new Error('puppeteer not available');
-  let browser;
-  try {
-    browser = await puppeteer.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath(),
-      headless: chromium.headless,
-      ignoreHTTPSErrors: true,
-    });
-    const page = await browser.newPage();
-    await page.setViewport({ width: 1920, height: 1080 });
-    await page.setUserAgent(BROWSER_HEADERS['User-Agent']);
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-    const html = await page.content();
-    return html;
-  } finally {
-    if (browser) await browser.close();
+async function fetchPage(url) {
+  const config = { headers: BROWSER_HEADERS };
+  if (PROXY_URL) {
+    const { HttpsProxyAgent } = require('https-proxy-agent');
+    config.httpsAgent = new HttpsProxyAgent(PROXY_URL);
   }
+  const response = await axios.get(url, config);
+  return response.data;
 }
 
 async function scrapeEpisode(slug, episode) {
   try {
     const episodeUrl = `${WITANIME_BASE_URL}/episode/${slug}-%D8%A7%D9%84%D8%AD%D9%84%D9%82%D8%A9-${episode}/`;
 
-    let html;
-    try {
-      const response = await axios.get(episodeUrl, { headers: BROWSER_HEADERS });
-      html = response.data;
-    } catch (axiosErr) {
-      if (axiosErr.response?.status === 403 && puppeteer && chromium) {
-        console.log('axios got 403, falling back to puppeteer...');
-        html = await fetchPageWithPuppeteer(episodeUrl);
-      } else {
-        throw axiosErr;
-      }
-    }
-
+    const html = await fetchPage(episodeUrl);
     const $ = cheerio.load(html);
 
     const title = $('h3').first().text().trim();
@@ -280,9 +249,8 @@ async function scrapeEpisode(slug, episode) {
 
 async function searchAnimeOnWitanime(query) {
   try {
-    const response = await axios.get(`${WITANIME_BASE_URL}/?s=${encodeURIComponent(query)}`, { headers: BROWSER_HEADERS });
-
-    const $ = cheerio.load(response.data);
+    const html = await fetchPage(`${WITANIME_BASE_URL}/?s=${encodeURIComponent(query)}`);
+    const $ = cheerio.load(html);
     const results = [];
 
     $('.anime-card-container').each((i, el) => {
