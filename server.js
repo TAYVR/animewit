@@ -66,7 +66,7 @@ app.get('/api/anime/:malId/episode/:episode', async (req, res) => {
       },
       watchServers: witanimeData.watchServers,
       downloadLinks: witanimeData.downloadLinks,
-      episodeList: witanimeData.episodeList,
+
       navigation: {
         animePageUrl: witanimeData.animePageUrl,
         prevEpisode: witanimeData.prevEpisode,
@@ -148,7 +148,7 @@ app.get('/api/episode/:slug/:episode', async (req, res) => {
       },
       watchServers: witanimeData.watchServers,
       downloadLinks: witanimeData.downloadLinks,
-      episodeList: witanimeData.episodeList,
+
       navigation: {
         animePageUrl: witanimeData.animePageUrl,
         prevEpisode: witanimeData.prevEpisode,
