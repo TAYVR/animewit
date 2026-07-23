@@ -215,32 +215,12 @@ async function scrapeEpisode(slug, episode) {
     const nextEpisode = $('.next-episode a').attr('href') || null;
     const animePageUrl = $('.anime-page-link a').attr('href') || null;
 
-    const episodeList = [];
-    $('#ULEpisodesList li').each((i, el) => {
-      const link = $(el).find('a');
-      const onclick = link.attr('onclick') || '';
-      const match = onclick.match(/openEpisode\('([^']+)'\)/);
-      if (match) {
-        try {
-          const epUrl = Buffer.from(match[1], 'base64').toString('utf-8');
-          const epMatch = epUrl.match(/-%D8%A7%D9%84%D8%AD%D9%84%D9%82%D8%A9-(\d+)\//);
-          const epNum = epMatch ? parseInt(epMatch[1]) : null;
-          episodeList.push({
-            number: epNum,
-            url: epUrl,
-            isActive: $(el).hasClass('episode-active')
-          });
-        } catch (e) {}
-      }
-    });
-
     return {
       title,
       animeName,
       animePageUrl,
       watchServers,
       downloadLinks,
-      episodeList,
       prevEpisode,
       nextEpisode
     };
